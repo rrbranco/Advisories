@@ -1,0 +1,108 @@
+FreeBSD/NetBSD/TrustedBSD*/DragonFlyBSD/MidnightBSD all versions FireWire IOCTL kernel integer overflow information disclousure
+11/15/2006
+
+Notice
+===================
+    This bug has been specially discovered for the Month of Kernel Bugs and to
+    the Hackers to Hackers Conference III (http://www.h2hc.org.br/en/).
+
+
+Summary
+===================
+
+    Firewire device is enabled by default in the GENERIC kernel.  It defines
+    an IOCTL function which can be malicious called passing a negative buffer
+    lenght value.  This value will bypass the lenght check (because the value
+    is negative) and will be used in a copyout operation.
+
+Systems Affected
+===================
+
+    FreeBSD     all versions
+    NetBSD      all versions
+    DragonFly   all versions
+    TrustedBSD* all versions
+    MidgnightBSD all versions (tks to Lucas Holt for advise us and patch)
+
+Impact
+===================
+
+    This is a kernel bug and the system can be compromised by local users and 
+    important system informations can be discloused (basically, a mem dump ;) )
+
+Explanation
+===================
+
+    Firewire interface can be tunned.  It provides an ioctl function receiving
+    many parameters that can be changed.
+
+    The follow is a code fragment from (FreeBSD - dev/firewire/fwdev.c (fw_ioctl    function) || DragonFlyBSD bus/firewire/fwdev.c (fw_ioctl function) || NetBSD    - dev/ieee1394/fwdev.c (FW_IOCTL function)) file:
+
+	if (crom_buf->len < len)
+		len = crom_buf->len;
+	else
+		crom_buf->len = len;
+
+	err = copyout(ptr, crom_buf->ptr, len);
+
+    We control the crom_buf->len (it's passed as argument to the ioctl function)
+    so, passing it as a negative value will bypass this if statement (our value
+    is minor than the default one).
+
+    So, our value is used in a copyout function. ptr is defined before this
+    copyout as:
+	 if ( fwdev == NULL ) {
+		...
+		ptr = malloc(CROMSIZE, M_FW, M_WAITOK);
+		...
+	 } else {
+		ptr = (void *)&fwdev->csrrom[0];
+		...
+	}
+
+    This information disclousure lead an attacker dump all the system memory.
+
+Solution
+===================
+
+     Attached in this advisory a patch for the FreeBSD 5.5 (it's pretty simple,      so, just need to be little changed to the other BSD's)
+
+Timelife
+===================
+
+     11/15/2006 - Advisory Public Disclousure (sorry for the developers, but we 
+     are just respecting the Month of Kernel Bugs Timelife)
+
+Acknowledgments
+===================
+
+     Filipe Balestra <filipe@balestra.com.br> and Rodrigo Rubira Branco 
+     (BSDaemon) <rodrigo@kernelhacking.com> for the discovering, analysis
+     and patch.
+
+Contact Information
+===================
+
+     You can reach the authors of this advisory by mail or visiting some
+     websites:
+	http://www.balestra.com.br  -> Personal Website of Filipe
+	http://www.risesecurity.org -> RISE Security Research (Rodrigo is member     of the RISE Security Team)
+	http://www.kernelhacking.com/rodrigo -> Personal Website of Rodrigo
+
+References
+===================
+
+     http://www.kernelhacking.com/bsdadv1.txt -> Actual version of the advisory
+     http://www.kernelhacking.com/rodrigo/docs/bsdadv.patch -> Patch for
+     FreeBSD 5.5
+     http://www.risesecurity.org/RISE-2006002.txt -> Related issue
+
+Disclaimer (taken from teso-team)
+===================
+
+     This advisory does not claim to be complete or to be usable for any
+     purpose. Especially information on the vulnerable systems may be
+     inaccurate or wrong. The supplied exploit is not to be used for malicious
+     purposes, but for educational purposes only.
+
+     This advisory is free for open distribution in unmodified form.
